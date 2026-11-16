@@ -1,0 +1,390 @@
+-- achzero ex | MM2 (Compact Menu + Fixed Fling)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ====== ГЛАВНОЕ ОКНО ======
+local gui = Instance.new("ScreenGui")
+gui.Name = "achzero_ex"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = game:GetService("CoreGui")
+
+-- Черный кружок
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.fromOffset(45, 45)
+toggleBtn.Position = UDim2.new(0, 15, 0.5, -22)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggleBtn.Text = "!"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.AutoButtonColor = false
+toggleBtn.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = toggleBtn
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(80, 80, 80)
+stroke.Thickness = 2
+stroke.Parent = toggleBtn
+
+-- ====== МЕНЮ (Маленькое) ======
+local menu = Instance.new("Frame")
+menu.Size = UDim2.fromOffset(240, 300) -- Уменьшено
+menu.Position = UDim2.new(0.5, -120, 0.5, -150)
+menu.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+menu.Visible = false
+menu.Parent = gui
+
+local menuCorner = Instance.new("UICorner")
+menuCorner.CornerRadius = UDim.new(0, 10)
+menuCorner.Parent = menu
+
+-- Внутренняя заливка
+local inner = Instance.new("Frame")
+inner.Size = UDim2.new(1, -10, 1, -10)
+inner.Position = UDim2.new(0, 5, 0, 5)
+inner.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+inner.Parent = menu
+
+local innerCorner = Instance.new("UICorner")
+innerCorner.CornerRadius = UDim.new(0, 8)
+innerCorner.Parent = inner
+
+-- Заголовок
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 35)
+title.BackgroundTransparency = 1
+title.Text = "achzero ex"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 22
+title.TextXAlignment = Enum.TextXAlignment.Center
+title.Parent = inner
+
+-- Переливающийся слой
+local rainbowStroke = Instance.new("UIStroke")
+rainbowStroke.Thickness = 3
+rainbowStroke.Parent = menu
+
+local hue = 0
+RunService.RenderStepped:Connect(function(dt)
+    hue = (hue + dt * 0.5) % 1
+    rainbowStroke.Color = Color3.fromHSV(hue, 1, 1)
+end)
+
+-- ====== СПИСОК ФУНКЦИЙ (Свайп) ======
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, 0, 1, -40)
+scroll.Position = UDim2.new(0, 0, 0, 40)
+scroll.BackgroundTransparency = 1
+scroll.ScrollBarThickness = 2
+scroll.ScrollBarImageColor3 = Color3.fromRGB(150, 150, 150)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+scroll.Parent = inner
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 5)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = scroll
+
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 5)
+end)
+
+local flags = {
+    espBox = false,
+    aimbot = false,
+    autoSherif = false,
+    antiaim = false,
+    speedX2 = false,
+    jumpX2 = false,
+    touchFling = false,
+}
+
+local function addToggle(name, key)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 30) -- Компактные кнопки
+    btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    btn.Text = name .. ": OFF"
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextSize = 13
+    btn.AutoButtonColor = false
+    btn.Parent = scroll
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        flags[key] = not flags[key]
+        btn.Text = name .. ": " .. (flags[key] and "ON" or "OFF")
+        btn.BackgroundColor3 = flags[key] and Color3.fromRGB(90, 140, 90) or Color3.fromRGB(70, 70, 70)
+    end)
+end
+
+addToggle("ESP Box", "espBox")
+addToggle("Aimbot (Sherif)", "aimbot")
+addToggle("Auto Sherif", "autoSherif")
+addToggle("Antiaim", "antiaim")
+addToggle("Speed x2", "speedX2")
+addToggle("Jump x2", "jumpX2")
+addToggle("Touch Fling", "touchFling")
+
+-- ====== ПЕРЕТАСКИВАНИЕ ======
+local dragging, dragStart, startPos
+toggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = toggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        toggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    menu.Visible = not menu.Visible
+end)
+
+-- ====== ESP BOX ======
+local espFolder = Instance.new("Folder")
+espFolder.Name = "achzero_esp"
+espFolder.Parent = gui
+
+local espCache = {}
+
+RunService.RenderStepped:Connect(function()
+    for plr, data in pairs(espCache) do
+        if not data.box or not data.box.Parent then
+            espCache[plr] = nil
+        end
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LP then continue end
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if not (hrp and hum and hum.Health > 0) or not flags.espBox then
+            if espCache[plr] then espCache[plr].box.Visible = false end
+            continue
+        end
+
+        local isMurder, isSherif = false, false
+        local backpack = plr:FindFirstChild("Backpack")
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Tool") then
+                if obj.Name == "Knife" then isMurder = true end
+                if obj.Name == "Gun" or obj.Name == "Revolver" then isSherif = true end
+            end
+        end
+        if backpack then
+            for _, obj in ipairs(backpack:GetChildren()) do
+                if obj:IsA("Tool") then
+                    if obj.Name == "Knife" then isMurder = true end
+                    if obj.Name == "Gun" or obj.Name == "Revolver" then isSherif = true end
+                end
+            end
+        end
+
+        local color = Color3.fromRGB(255, 255, 255)
+        if isMurder then color = Color3.fromRGB(255, 0, 0) end
+        if isSherif then color = Color3.fromRGB(0, 150, 255) end
+
+        local data = espCache[plr]
+        if not data then
+            local box = Instance.new("Frame")
+            box.BackgroundColor3 = color
+            box.BackgroundTransparency = 0.8
+            box.BorderSizePixel = 0
+            box.Parent = espFolder
+            
+            local s = Instance.new("UIStroke")
+            s.Thickness = 1.5
+            s.Color = color
+            s.Parent = box
+            
+            local hpBg = Instance.new("Frame")
+            hpBg.Size = UDim2.new(0, 3, 1, 0)
+            hpBg.Position = UDim2.new(-1, -5, 0, 0)
+            hpBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            hpBg.BorderSizePixel = 0
+            hpBg.Parent = box
+            
+            local hpFill = Instance.new("Frame")
+            hpFill.Size = UDim2.new(1, 0, 1, 0)
+            hpFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            hpFill.BorderSizePixel = 0
+            hpFill.Parent = hpBg
+            
+            data = { box = box, stroke = s, hpFill = hpFill }
+            espCache[plr] = data
+        end
+
+        local head = char:FindFirstChild("Head")
+        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+        local headPos = head and Camera:WorldToViewportPoint(head.Position)
+        
+        if onScreen and headPos then
+            local height = math.abs(headPos.Y - pos.Y) * 2.2
+            local width = height * 0.65
+            local x = pos.X - (width / 2)
+            local y = pos.Y - (height / 2)
+
+            data.box.Visible = true
+            data.box.Size = UDim2.fromOffset(width, height)
+            data.box.Position = UDim2.fromOffset(x, y)
+            
+            data.box.BackgroundColor3 = color
+            data.stroke.Color = color
+            
+            data.hpFill.Size = UDim2.new(1, 0, hum.Health / hum.MaxHealth, 0)
+            if hum.Health / hum.MaxHealth > 0.6 then
+                data.hpFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            elseif hum.Health / hum.MaxHealth > 0.3 then
+                data.hpFill.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+            else
+                data.hpFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            end
+        else
+            data.box.Visible = false
+        end
+    end
+end)
+
+-- ====== AIMBOT ======
+local function getMurder()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LP then continue end
+        local char = plr.Character
+        if not char then continue end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not (hum and hum.Health > 0) then continue end
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and tool.Name == "Knife" then return plr end
+        end
+        local bp = plr:FindFirstChild("Backpack")
+        if bp then
+            for _, tool in ipairs(bp:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name == "Knife" then return plr end
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not flags.aimbot then return end
+    local char = LP.Character
+    if not char then return end
+    local hasGun = false
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name == "Gun" or tool.Name == "Revolver") then hasGun = true end
+    end
+    if not hasGun then return end
+    local target = getMurder()
+    if not target then return end
+    local tHead = target.Character and target.Character:FindFirstChild("Head")
+    if tHead then
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tHead.Position)
+    end
+end)
+
+-- ====== AUTO SHERIF ======
+RunService.Stepped:Connect(function()
+    if not flags.autoSherif then return end
+    local char = LP.Character
+    if not char then return end
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and (tool.Name == "Gun" or tool.Name == "Revolver") then
+            local handle = tool:FindFirstChild("Handle")
+            if handle then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    handle.CFrame = hrp.CFrame * CFrame.new(0, 0, -2) * CFrame.Angles(0, math.rad(180), 0)
+                end
+            end
+        end
+    end
+end)
+
+-- ====== ANTIAIM ======
+RunService.RenderStepped:Connect(function()
+    if not flags.antiaim then return end
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(math.random(0, 360)), 0)
+    end
+end)
+
+-- ====== SPEED x2 ======
+RunService.Stepped:Connect(function()
+    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = flags.speedX2 and 32 or 16
+    end
+end)
+
+-- ====== JUMP x2 ======
+RunService.Stepped:Connect(function()
+    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = flags.jumpX2 and 100 or 50
+    end
+end)
+
+-- ====== TOUCH FLING ======
+RunService.Stepped:Connect(function()
+    if not flags.touchFling then return end
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LP then continue end
+        local tChar = plr.Character
+        local tHrp = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if tHrp and (tHrp.Position - hrp.Position).Magnitude < 5 then
+            local dir = (tHrp.Position - hrp.Position).Unit
+            local rand = Vector3.new(math.random(-10, 10), math.random(5, 20), math.random(-10, 10))
+            tHrp.AssemblyLinearVelocity = (dir + rand) * 1000
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end)
+
+-- ====== ПЕРЕТАСКИВАНИЕ МЕНЮ ======
+local mdragging, mdStart, mStart
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        mdragging = true
+        mdStart = input.Position
+        mStart = menu.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then mdragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if mdragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - mdStart
+        menu.Position = UDim2.new(mStart.X.Scale, mStart.X.Offset + d.X, mStart.Y.Scale, mStart.Y.Offset + d.Y)
+    end
+end)

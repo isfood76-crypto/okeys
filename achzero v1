@@ -1,0 +1,381 @@
+--[[ AchZero Delta v5 | MM2 | ESP Box + TouchFling COSMOS (без заморозки) + AntiAim ]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ===================== GUI =====================
+local gui = Instance.new("ScreenGui")
+gui.Name = "achzero dlt"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = (pcall(function() return game:GetService("CoreGui") end) and game:GetService("CoreGui")) or LocalPlayer:WaitForChild("PlayerGui")
+
+-- Кружок
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0, 50, 0, 50)               -- было 60, стало 50
+toggle.Position = UDim2.new(0, 20, 0, 20)
+toggle.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+toggle.BackgroundTransparency = 0.15
+toggle.BorderSizePixel = 0
+toggle.Text = "AZ"
+toggle.TextColor3 = Color3.fromRGB(0, 255, 170)
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 18                                 -- меньше шрифт
+toggle.Parent = gui
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
+
+-- Меню: мельче + всегда по центру при открытии
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 210, 0, 280)                -- было 260×360, стало 210×280
+main.Position = UDim2.new(0.5, -105, 0.5, -140)      -- ЦЕНТР экрана (anchor 0.5)
+main.AnchorPoint = Vector2.new(0, 0)
+main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+main.BackgroundTransparency = 0.05
+main.BorderSizePixel = 0
+main.Visible = false
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 32)
+title.BackgroundTransparency = 1
+title.Text = "achzero delta"
+title.TextColor3 = Color3.fromRGB(0, 255, 170)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.Parent = main
+
+local function makeToggle(text, y)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 28)              -- было 34, стало 28
+    btn.Position = UDim2.new(0, 8, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.BorderSizePixel = 0
+    btn.Text = text .. "  [OFF]"
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 12                                 -- было 14
+    btn.Parent = main
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local espBtn     = makeToggle("ESP Box", 40)
+local flingBtn   = makeToggle("Touch Fling (COSMOS)", 74)
+local antiaimBtn = makeToggle("AntiAim", 108)
+
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1, -16, 0, 100)
+info.Position = UDim2.new(0, 8, 0, 142)
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.fromRGB(150, 150, 150)
+info.Font = Enum.Font.Gotham
+info.TextSize = 11
+info.TextWrapped = true
+info.TextYAlignment = Enum.TextYAlignment.Top
+info.Parent = main
+
+local state = { esp = false, fling = false, antiaim = false }
+
+-- ===================== Кружок: drag + click =====================
+do
+    local dragging = false
+    local dragStart = nil
+    local startOffset = nil
+    local moved = false
+    local pressTime = 0
+
+    toggle.InputBegan:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
+           and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        dragging = true
+        moved = false
+        pressTime = tick()
+        dragStart = Vector2.new(input.Position.X, input.Position.Y)
+        startOffset = Vector2.new(toggle.Position.X.Offset, toggle.Position.Y.Offset)
+    end)
+
+    UIS.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+           and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local cur = Vector2.new(input.Position.X, input.Position.Y)
+        local delta = cur - dragStart
+        if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+            moved = true
+        end
+        if moved then
+            toggle.Position = UDim2.new(0, startOffset.X + delta.X, 0, startOffset.Y + delta.Y)
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
+           and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        local held = tick() - pressTime
+        if not moved and held < 0.4 then
+            -- ВСЕГДА перецентровываем меню перед показом
+            main.Position = UDim2.new(0.5, -main.Size.X.Offset / 2, 0.5, -main.Size.Y.Offset / 2)
+            main.Visible = not main.Visible
+        end
+        dragging = false
+        moved = false
+    end)
+end
+
+-- ===================== ESP Box =====================
+local espFolder = Instance.new("Folder", gui)
+espFolder.Name = "ESP"
+local espData = {}
+
+local function getRoleColor(plr)
+    local ok, role = pcall(function()
+        local c = plr.Character
+        return c and (c:GetAttribute("Role") or (c:FindFirstChild("Role") and c.Role.Value))
+    end)
+    if ok and role then
+        local r = tostring(role):lower()
+        if r:find("murder") then return Color3.fromRGB(255, 40, 40) end
+        if r:find("sheriff") then return Color3.fromRGB(40, 140, 255) end
+    end
+    return Color3.fromRGB(255, 255, 255)
+end
+
+local function createESP(plr)
+    if plr == LocalPlayer or espData[plr] then return end
+    local box = Instance.new("Frame")
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 0
+    box.Visible = false
+    box.Parent = espFolder
+    local stroke = Instance.new("UIStroke", box)
+    stroke.Thickness = 1.5
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local hpBack = Instance.new("Frame")
+    hpBack.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    hpBack.BorderSizePixel = 0
+    hpBack.Visible = false
+    hpBack.Parent = espFolder
+
+    local hpBar = Instance.new("Frame")
+    hpBar.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+    hpBar.BorderSizePixel = 0
+    hpBar.Visible = false
+    hpBar.Parent = espFolder
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.TextSize = 11
+    nameLbl.TextStrokeTransparency = 0
+    nameLbl.Visible = false
+    nameLbl.Parent = espFolder
+
+    espData[plr] = { box = box, stroke = stroke, hpBack = hpBack, hpBar = hpBar, nameLbl = nameLbl }
+end
+
+for _, p in ipairs(Players:GetPlayers()) do createESP(p) end
+Players.PlayerAdded:Connect(createESP)
+Players.PlayerRemoving:Connect(function(p)
+    local d = espData[p]
+    if d then
+        for _, v in pairs(d) do v:Destroy() end
+        espData[p] = nil
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    for plr, d in pairs(espData) do
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if state.esp and hrp and hum and hum.Health > 0 then
+            local pos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local dist = (workspace.CurrentCamera.CFrame.Position - hrp.Position).Magnitude
+                local h = math.clamp(1800 / math.max(dist, 1), 20, 300)
+                local w = h * 0.55
+                local color = getRoleColor(plr)
+
+                d.box.Visible = true
+                d.box.Size = UDim2.new(0, w, 0, h)
+                d.box.Position = UDim2.new(0, pos.X - w/2, 0, pos.Y - h/2)
+                d.stroke.Color = color
+
+                local hpRatio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                local barH = 4
+                d.hpBack.Visible = true
+                d.hpBack.Size = UDim2.new(0, w, 0, barH)
+                d.hpBack.Position = UDim2.new(0, pos.X - w/2, 0, pos.Y - h/2 - barH - 2)
+                d.hpBar.Visible = true
+                d.hpBar.Size = UDim2.new(0, w * hpRatio, 0, barH)
+                d.hpBar.Position = d.hpBack.Position
+                d.hpBar.BackgroundColor3 = Color3.fromRGB(0, 255, 100):Lerp(Color3.fromRGB(255, 0, 0), 1 - hpRatio)
+
+                d.nameLbl.Visible = true
+                d.nameLbl.Text = plr.Name
+                d.nameLbl.TextColor3 = color
+                d.nameLbl.Size = UDim2.new(0, 200, 0, 13)
+                d.nameLbl.Position = UDim2.new(0, pos.X, 0, pos.Y - h/2 - barH - 16)
+                d.nameLbl.AnchorPoint = Vector2.new(0.5, 0)
+            else
+                d.box.Visible = false; d.hpBack.Visible = false
+                d.hpBar.Visible = false; d.nameLbl.Visible = false
+            end
+        else
+            d.box.Visible = false; d.hpBack.Visible = false
+            d.hpBar.Visible = false; d.nameLbl.Visible = false
+        end
+    end
+end)
+
+-- ===================== AntiAim =====================
+local antiConn
+local spin = 0
+local function startAntiAim()
+    if antiConn then return end
+    antiConn = RunService.Heartbeat:Connect(function(dt)
+        spin = spin + dt * 360
+        local c = LocalPlayer.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        if r then
+            r.CFrame = r.CFrame * CFrame.Angles(0, math.rad(spin), 0)
+        end
+    end)
+end
+local function stopAntiAim()
+    if antiConn then antiConn:Disconnect(); antiConn = nil end
+end
+
+-- ===================== Touch Fling COSMOS (v5, без заморозки) =====================
+-- Изменения:
+--   * FLING_FRAMES 120 -> 40 (0.7 сек вместо 2 сек)
+--   * FLING_STEP 10 -> 30 (всё равно 1200 стадов, но быстрее)
+--   * Anchored на себе — только 3 кадра (0.05 сек), потом снимается
+local flingConn
+local FLING_RADIUS   = 8
+local FLING_STEP     = 30      -- 30 стадов за кадр (быстро, но не режет античит)
+local FLING_FRAMES   = 40      -- 40 кадров ≈ 0.7 сек = 1200 стадов
+local FLING_RESIDUAL = Vector3.new(0, 800, 0)
+local SELF_ANCHOR_FRAMES = 3   -- сколько кадров ты зафиксирован (0.05 сек)
+local flingCooldown = {}
+
+local function flingCosmos(plr)
+    local c = plr.Character
+    local r = c and c:FindFirstChild("HumanoidRootPart")
+    local h = c and c:FindFirstChildOfClass("Humanoid")
+    if not (r and h) or h.Health <= 0 then return end
+
+    local gotOwner = pcall(function() r:SetNetworkOwner(LocalPlayer) end)
+
+    pcall(function() h.PlatformStand = true end)
+    pcall(function() r.CanCollide = false end)
+    pcall(function() r.Massless = true end)
+    pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+    pcall(function() r.AssemblyAngularVelocity = Vector3.zero end)
+
+    -- Фиксируем себя ТОЛЬКО на 3 кадра — импульс не успеет перейти, ты не замираешь
+    local lc = LocalPlayer.Character
+    local lhrp = lc and lc:FindFirstChild("HumanoidRootPart")
+    local wasAnchored = lhrp and lhrp.Anchored or false
+    local selfAnchorFrames = 0
+
+    if lhrp then
+        lhrp.Anchored = true
+        selfAnchorFrames = SELF_ANCHOR_FRAMES
+    end
+
+    local frame = 0
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        frame = frame + 1
+
+        -- снимаем Anchored с себя через 3 кадра — ты снова двигаешься
+        if selfAnchorFrames > 0 then
+            selfAnchorFrames = selfAnchorFrames - 1
+            if selfAnchorFrames == 0 and lhrp and lhrp.Parent then
+                lhrp.Anchored = wasAnchored
+            end
+        end
+
+        if frame > FLING_FRAMES or not (r and r.Parent) then
+            conn:Disconnect()
+            if r and r.Parent then
+                pcall(function()
+                    r.AssemblyLinearVelocity = FLING_RESIDUAL
+                    r.AssemblyAngularVelocity = Vector3.new(40, 40, 40)
+                end)
+                task.delay(2, function()
+                    if r and r.Parent then
+                        pcall(function() r.Massless = false end)
+                        pcall(function() r.CanCollide = true end)
+                    end
+                    if h and h.Parent then
+                        pcall(function() h.PlatformStand = false end)
+                    end
+                end)
+            end
+            -- на всякий случай снимаем Anchored, если ещё висит
+            if lhrp and lhrp.Parent and lhrp.Anchored then
+                lhrp.Anchored = wasAnchored
+            end
+        else
+            pcall(function()
+                r.CFrame = r.CFrame + Vector3.new(0, FLING_STEP, 0)
+            end)
+        end
+    end)
+end
+
+local function startFling()
+    if flingConn then return end
+    flingConn = RunService.Heartbeat:Connect(function()
+        local lc = LocalPlayer.Character
+        local lhrp = lc and lc:FindFirstChild("HumanoidRootPart")
+        local lhum = lc and lc:FindFirstChildOfClass("Humanoid")
+        if not (lhrp and lhum) or lhum.Health <= 0 then return end
+
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local now = tick()
+                if flingCooldown[plr] and now - flingCooldown[plr] < 2.0 then continue end
+                local c = plr.Character
+                local r = c and c:FindFirstChild("HumanoidRootPart")
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if r and h and h.Health > 0 then
+                    local dist = (r.Position - lhrp.Position).Magnitude
+                    if dist < FLING_RADIUS then
+                        flingCooldown[plr] = now
+                        flingCosmos(plr)
+                    end
+                end
+            end
+        end
+    end)
+end
+local function stopFling()
+    if flingConn then flingConn:Disconnect(); flingConn = nil end
+end
+
+-- ===================== Один обработчик на кнопку =====================
+local function bindToggle(btn, key, label, onStart, onStop)
+    btn.MouseButton1Click:Connect(function()
+        state[key] = not state[key]
+        btn.Text = label .. (state[key] and "  [ON]" or "  [OFF]")
+        btn.TextColor3 = state[key] and Color3.fromRGB(0, 255, 170) or Color3.fromRGB(200, 200, 200)
+        if state[key] then
+            if onStart then onStart() end
+        else
+            if onStop then onStop() end
+        end
+    end)
+end
+
+bindToggle(espBtn,     "esp",     "ESP Box",              nil,          nil)
+bindToggle(flingBtn,   "fling",   "Touch Fling (COSMOS)", startFling,   stopFling)
+bindToggle(antiaimBtn, "antiaim", "AntiAim",              startAntiAim, stopAntiAim)
